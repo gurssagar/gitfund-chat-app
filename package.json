@@ -1,17 +1,20 @@
 {
   "name": "gitfund-backend",
   "private": true,
+  "type": "module",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
   },
-  "peerDependencies": {
-    "typescript": "^5"
+  "scripts": {
+    "start": "node --loader ts-node/esm server.ts",
+    "dev": "node --watch --loader ts-node/esm server.ts"
   },
   "dependencies": {
-    "@types/express": "types/express",
+    "@types/express": "^4.17.21",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "express-types": "^0.0.4",
     "socket.io": "^4.8.1"
   }
 }
