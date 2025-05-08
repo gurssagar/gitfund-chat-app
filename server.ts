@@ -14,7 +14,7 @@ interface ChatMessage {
 }
 
 const app = express();
-const port = parseInt(process.env.PORT || "4000", 10);
+const port = parseInt(process.env.PORT || "3000", 10);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
