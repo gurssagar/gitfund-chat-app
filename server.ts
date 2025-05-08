@@ -113,3 +113,5 @@ function shouldUsersCommunicate(user1: string, user2: string): boolean {
 httpServer.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
+export default app;

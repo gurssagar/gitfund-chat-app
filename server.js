@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import bodyParser from "body-parser";
 dotenv.config();
 const app = express();
-const port = parseInt(process.env.PORT || "3000", 10);
+const port = parseInt(process.env.PORT || "4000", 10);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
@@ -89,3 +89,6 @@ function shouldUsersCommunicate(user1, user2) {
 httpServer.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
+
+module.exports = app;
+
