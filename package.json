@@ -2,6 +2,9 @@
   "name": "gitfund-backend",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "^20.11.19",
