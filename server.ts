@@ -52,25 +52,35 @@ app.post('/register', (req, res) => {
     return res.status(409).json({ error: 'Username already taken' });
   }
   
-  // In production, you would verify the token here
+  // Return the username and a token (in production, use JWT or similar)
   res.status(200).json({ 
     status: 'success',
     username,
+    token: username, // Simplified for demo - use proper auth tokens in production
     message: `Username ${username} is available`
   });
 });
 
 io.on("connection", (socket: Socket) => {
   console.log(`Client connected: ${socket.id}`);
+  
+  socket.on('hello', (arg) => {
+      console.log(arg); // 'world'
+  });
+  // Register user with token from POST response
+  socket.on('authenticate', ({ username, token }: { username: any, token: any }) => {
+    // Verify token matches username (in production, verify properly)
+    console.log(`User ${username} authenticated with token ${token}`);
+    if (token !== username) {
+      socket.emit('auth_error', 'Invalid token');
+      return;
+    }
 
-  // Register user with authentication token
-  socket.on('authenticate', ({ username }: { username: string }) => {
     if (activeConnections.has(username)) {
       socket.emit('auth_error', 'User already connected');
       return;
     }
 
-    // In production, verify token against your auth system
     activeConnections.set(username, { socket, username });
     socket.emit('authenticated', { username });
   });
@@ -99,6 +109,10 @@ io.on("connection", (socket: Socket) => {
     } else {
       socket.emit('error', 'Communication not allowed');
     }
+  });
+
+  socket.on('connect', () => {
+    
   });
 
   socket.on("disconnect", () => {
