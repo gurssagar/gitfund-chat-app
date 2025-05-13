@@ -17,7 +17,7 @@ const app = express();
 
 // Add CORS middleware before other routes
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:');
+  res.header('Access-Control-Allow-Origin', '*:');
   res.header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   next();
@@ -83,7 +83,7 @@ io.on("connection", (socket: Socket) => {
         old.socket.disconnect(true);
       }
     }
-    
+
     activeConnections.set(username, { socket, username });
 
     activeConnections.set(username, { socket, username });
