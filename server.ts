@@ -26,6 +26,8 @@ app.use((req, res, next) => {
 const port = parseInt(process.env.PORT || "4000", 10);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  pingInterval: 25000, // default is 25000ms
+  pingTimeout: 100000,
   cors: {
     origin: "*",
     methods: ["GET", "POST","DELETE"]
