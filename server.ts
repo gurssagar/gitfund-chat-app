@@ -40,7 +40,7 @@ app.use(bodyParser.json());
 
 
 // Store connected users with their active connections
-const activeConnections = new Map<string, { socket: Socket, username: string }>();
+const activeConnections = new Map<string, { socket: Socket, username: string, connectionTime: number }>();
 
 // Add POST endpoint for username registration
 app.post('/register', (req, res) => {
@@ -50,8 +50,9 @@ app.post('/register', (req, res) => {
     return res.status(400).json({ error: 'Username is required' });
   }
   
+  // Check if username exists but allow reconnection
   if (activeConnections.has(username)) {
-    return res.status(409).json({ error: 'Username already taken' });
+    console.log(`User ${username} already registered but allowing reconnection`);
   }
   
   // Return the username and a token (in production, use JWT or similar)
@@ -82,12 +83,36 @@ io.on("connection", (socket: Socket) => {
 
     if (activeConnections.has(username)) {
       const existingConnection = activeConnections.get(username);
-      console.log(`[AuthReject] User ${username} already connected with SocketID: ${existingConnection?.socket.id}. New attempt from SocketID: ${socket.id}`);
-      socket.emit('auth_error', 'User already connected');
-      return;
+      
+      // If this is a reconnection from the same user (like a page refresh)
+      if (existingConnection) {
+        console.log(`[Reconnection] User ${username} reconnecting. Old SocketID: ${existingConnection.socket.id}, New SocketID: ${socket.id}`);
+        
+        // Clean up the old socket
+        try {
+          existingConnection.socket.disconnect(true);
+        } catch (err) {
+          console.log(`[DisconnectError] Error disconnecting old socket: ${err}`);
+        }
+        
+        // Update with new socket
+        activeConnections.set(username, { 
+          socket, 
+          username, 
+          connectionTime: Date.now() 
+        });
+        
+        console.log(`[ReconnectSuccess] User: ${username} reconnected with SocketID: ${socket.id}`);
+        socket.emit('authenticated', { username });
+        return;
+      }
     }
 
-    activeConnections.set(username, { socket, username });
+    activeConnections.set(username, { 
+      socket, 
+      username, 
+      connectionTime: Date.now() 
+    });
     console.log(`[AuthSuccess] User: ${username} added with SocketID: ${socket.id}. Active connections: ${Array.from(activeConnections.keys())}`);
     socket.emit('authenticated', { username });
   });
@@ -136,8 +161,20 @@ io.on("connection", (socket: Socket) => {
     });
 
     if (disconnectedUser) {
-      activeConnections.delete(disconnectedUser);
-      console.log(`[UserRemoved] User: ${disconnectedUser} (SocketID: ${socket.id}) removed due to disconnect. Active connections: ${Array.from(activeConnections.keys())}`);
+      // For intentional disconnects or long disconnections, remove the user
+      if (reason === 'client namespace disconnect' || reason === 'transport close') {
+        // Keep the connection for a short time to allow for page refreshes
+        setTimeout(() => {
+          // Check if the user hasn't reconnected in the meantime
+          const currentConnection = activeConnections.get(disconnectedUser as string);
+          if (currentConnection && currentConnection.socket.id === socket.id) {
+            activeConnections.delete(disconnectedUser as string);
+            console.log(`[UserRemoved] User: ${disconnectedUser} (SocketID: ${socket.id}) removed after timeout. Active connections: ${Array.from(activeConnections.keys())}`);
+          }
+        }, 5000); // 5 seconds grace period for reconnection
+        
+        console.log(`[UserDisconnectTimeout] User: ${disconnectedUser} (SocketID: ${socket.id}) will be removed in 5 seconds if no reconnection occurs.`);
+      }
     } else {
       console.log(`[DisconnectNoUser] SocketID: ${socket.id} disconnected, but was not found in activeConnections (might not have authenticated).`);
     }
