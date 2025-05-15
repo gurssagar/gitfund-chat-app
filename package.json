@@ -2,23 +2,27 @@
   "name": "gitfund-backend",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "devDependencies": {
     "@types/bun": "latest",
-    "drizzle-kit": "^0.31.0",
+    "@types/node": "^20.11.19",
     "ts-node": "^10.9.2",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.0.0"
   },
   "scripts": {
-    "start": "node --loader ts-node/esm server.ts",
-    "dev": "node --watch --loader ts-node/esm server.ts"
+    "start": "node dist/server.js",
+    "dev": "nodemon --exec ts-node server.ts",
+    "build": "tsc --project tsconfig.json",
+    "postbuild": "cp package*.json dist/"
   },
   "dependencies": {
     "@types/express": "^4.17.21",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "^0.43.1",
     "express": "^5.1.0",
-    "postgres": "^3.4.5",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "nodemon": "^3.0.3",
+    "rimraf": "^5.0.5"
   }
 }
