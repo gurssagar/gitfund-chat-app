@@ -3,7 +3,7 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { messages } from "./db/schema";
+import { messages } from "./db/schema.js";
 import { randomUUID } from "crypto";
 
 dotenv.config();
