@@ -1,7 +1,8 @@
-import { drizzle } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 
-async function main() {
-  const db = drizzle("postgres-js", process.env.DATABASE_URL);
-}
-
-main();
+const db = drizzle({
+  connection: {
+    connectionString: process.env.DATABASE_URL,
+    ssl: true,
+  },
+});
