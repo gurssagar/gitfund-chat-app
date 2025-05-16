@@ -2,7 +2,6 @@ import express from "express";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
-import bodyParser from "body-parser";
 
 dotenv.config();
 
@@ -25,6 +24,7 @@ app.use((req, res, next) => {
 
 const port = parseInt(process.env.PORT || "4000", 10);
 const httpServer = createServer(app);
+// Update the Server initialization to include auth middleware
 const io = new Server(httpServer, {
   pingInterval: 25000, // default is 25000ms
   pingTimeout: 100000,
@@ -34,38 +34,62 @@ const io = new Server(httpServer, {
   }
 });
 
-// Add middleware for parsing JSON
-app.use(bodyParser.json());
+// Add middleware for Socket.io authentication
+io.use((socket, next) => {
+  const username = socket.handshake.auth.username;
+  if (!username) {
+    return next(new Error("Invalid username"));
+  }
+  
+  // Attach the username to the socket for later use
+  socket.data.username = username;
+  next();
+});
 
 
 
 // Store connected users with their active connections
 const activeConnections = new Map<string, { socket: Socket, username: string, connectionTime: number }>();
 
-// Add POST endpoint for username registration
-app.post('/register', (req, res) => {
-  const { username } = req.body;
-  console.log(`Received registration request for ${username}`);
-  if (!username) {
-    return res.status(400).json({ error: 'Username is required' });
-  }
-  
-  // Check if username exists but allow reconnection
-  if (activeConnections.has(username)) {
-    console.log(`User ${username} already registered but allowing reconnection`);
-  }
-  
-  // Return the username and a token (in production, use JWT or similar)
-  res.status(200).json({ 
-    status: 'success',
-    username,
-    token: username, // Simplified for demo - use proper auth tokens in production
-    message: `Username ${username} is available`
-  });
-});
+
 
 io.on("connection", (socket: Socket) => {
   console.log(`[Connection] Client connected: ${socket.id}`);
+  
+  // Get the username from socket data (set in middleware)
+  const username = socket.data.username;
+  
+  // If username exists, handle the connection
+  if (username) {
+    console.log(`[Auth] User ${username} connected with SocketID: ${socket.id}`);
+    
+    // Check if user already exists in activeConnections
+    if (activeConnections.has(username)) {
+      const existingConnection = activeConnections.get(username);
+      
+      // If this is a reconnection from the same user
+      if (existingConnection) {
+        console.log(`[Reconnection] User ${username} reconnecting. Old SocketID: ${existingConnection.socket.id}, New SocketID: ${socket.id}`);
+        
+        // Clean up the old socket
+        try {
+          existingConnection.socket.disconnect(true);
+        } catch (err) {
+          console.log(`[DisconnectError] Error disconnecting old socket: ${err}`);
+        }
+      }
+    }
+    
+    // Store the new connection
+    activeConnections.set(username, { 
+      socket, 
+      username, 
+      connectionTime: Date.now() 
+    });
+    
+    console.log(`[AuthSuccess] User: ${username} added with SocketID: ${socket.id}. Active connections: ${Array.from(activeConnections.keys())}`);
+    socket.emit('authenticated', { username });
+  }
   
   socket.on('hello', (arg) => {
       console.log(`[Hello] SocketID: ${socket.id}, Arg: ${arg}`); // 'world'
