@@ -2,6 +2,11 @@ import express from "express";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
+<<<<<<< Updated upstream
+=======
+import { drizzle } from "drizzle-orm";
+import { messages } from "./src/db/schema";
+>>>>>>> Stashed changes
 
 dotenv.config();
 
@@ -140,9 +145,16 @@ io.on("connection", (socket: Socket) => {
     console.log(`[AuthSuccess] User: ${username} added with SocketID: ${socket.id}. Active connections: ${Array.from(activeConnections.keys())}`);
     socket.emit('authenticated', { username });
   });
+<<<<<<< Updated upstream
 
   // Private message handler with validation
   socket.on('privateMessage', (msg: ChatMessage) => {
+=======
+console.log("kajbfcbbfkcjajkcbks");
+  // Private message handler with validation
+  socket.on('privateMessage', async (msg: ChatMessage) => {
+    console.log("msg nqwlkcanlknkcnqklwc",msg);
+>>>>>>> Stashed changes
     console.log(`[PrivateMessage] From: ${msg.from} To: ${msg.to} SocketID: ${socket.id}`);
     const sender = activeConnections.get(msg.from);
     if (!sender || sender.socket.id !== socket.id) {
@@ -158,10 +170,28 @@ io.on("connection", (socket: Socket) => {
       return;
     }
 
+    // Insert the message into the database
+    try {
+      await db.insert(messages).values({
+        id: generateUniqueId(), // You need a function to generate unique IDs
+        fromId: msg.from,
+        toId: msg.to,
+        date: new Date().toISOString(),
+        chatData: [msg],
+      });
+      console.log("Message inserted into database");
+    } catch (error) {
+      console.error("Error inserting message into database", error);
+    }
+
     // Verify both users are allowed to communicate
     if (shouldUsersCommunicate(msg.from, msg.to)) {
       recipient.socket.emit('privateMessage', msg);
+<<<<<<< Updated upstream
       socket.emit('messageDelivered', { 
+=======
+      socket.emit('messageDelivered', {
+>>>>>>> Stashed changes
         to: msg.to,
         timestamp: new Date().toISOString()
       });
