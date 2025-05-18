@@ -1,0 +1,32 @@
+# Provides a basic configuration for building and running this Node.js/TypeScript application with Nixpacks.
+
+# [phases.setup]
+# Nixpacks automatically detects Node.js. It will use the version specified
+# in package.json's "engines" field (e.g., "node": "22.x").
+# It will also run 'npm ci' if package-lock.json is present, or 'npm install' otherwise.
+# If you need to override the Node.js version or add other system dependencies, you can uncomment and configure:
+# nixPkgs = ["nodejs_22"] # Ensure this is the correct Nix package name for Node.js 22
+
+[phases.build]
+# This command executes the "build" script from package.json:
+# "build": "tsc --project tsconfig.json"
+# and the "postbuild" script: "cp package*.json dist/"
+# Nixpacks will typically run this after dependencies are installed.
+cmds = ["npm run build"]
+
+[start]
+# This command executes the "start" script from package.json:
+# "start": "node dist/server.js"
+cmd = "npm start"
+
+# Define environment variables for the start phase.
+[vars]
+# The application (server.ts) listens on process.env.PORT or defaults to 4000.
+# Setting PORT here ensures it's available to the application.
+# Hosting platforms (like Fly.io, Railway, etc.) might override this PORT value with their own.
+PORT = "4000"
+
+# If you are generating a Docker container using `nixpacks build . --docker` and need to map ports:
+# [ports]
+# "4000" = "http" # This would expose port 4000 on the Docker container.
+                 # For many platforms, setting the PORT env var (as above) is sufficient.
