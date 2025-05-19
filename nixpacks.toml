@@ -11,8 +11,8 @@
 # This command executes the "build" script from package.json:
 # "build": "tsc --project tsconfig.json"
 # and the "postbuild" script: "cp package*.json dist/"
-# Nixpacks will typically run this after dependencies are installed.
-cmds = ["npm run build"]
+# Nixpacks will typically run these after dependencies are installed.
+cmds = ["npm run build", "npm run postbuild"]
 
 [start]
 # This command executes the "start" script from package.json:
