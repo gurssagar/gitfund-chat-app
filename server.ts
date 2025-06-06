@@ -24,7 +24,14 @@ const httpServer = createServer(app);
 
 // CORS middleware
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "http://localhost:3000");
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "https://gitfund-osnf.vercel.app",
+  ];
+  const origin = req.header("Origin");
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   next();
