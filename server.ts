@@ -42,7 +42,7 @@ const io = new Server(httpServer, {
   pingInterval: 25000,
   pingTimeout: 60000,
   cors: {
-    origin: "gitfund-osnf.vercel.app",
+    origin: "https://gitfund-osnf.vercel.app",
     methods: ["GET", "POST"],
     credentials: true,
   },
