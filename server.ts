@@ -1,6 +1,5 @@
 import express from "express";
 import { createServer } from "http";
-import {drizzle} from "drizzle-orm"
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
 
@@ -13,208 +12,215 @@ interface ChatMessage {
   from: string;
 }
 
-const app = express();
-
-// Add CORS middleware before other routes
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  next();
-});
-
-const port = parseInt(process.env.PORT || "4000", 10);
-const httpServer = createServer(app);
-// Update the Server initialization to include auth middleware
-const io = new Server(httpServer, {
-  pingInterval: 25000, // default is 25000ms
-  pingTimeout: 100000,
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST","DELETE"]
-  }
-});
-
-// Add middleware for Socket.io authentication
-io.use((socket, next) => {
-  const username = socket.handshake.auth.username;
-  if (!username) {
-    return next(new Error("Invalid username"));
-  }
-  
-  // Attach the username to the socket for later use
-  socket.data.username = username;
-  next();
-});
-
-
-
-// Store connected users with their active connections
-const activeConnections = new Map<string, { socket: Socket, username: string, connectionTime: number }>();
-
-
-
-io.on("connection", (socket: Socket) => {
-  console.log(`[Connection] Client connected: ${socket.id}`);
-  
-  // Get the username from socket data (set in middleware)
-  const username = socket.data.username;
-  
-  // If username exists, handle the connection
-  if (username) {
-    console.log(`[Auth] User ${username} connected with SocketID: ${socket.id}`);
-    
-    // Check if user already exists in activeConnections
-    if (activeConnections.has(username)) {
-      const existingConnection = activeConnections.get(username);
-      
-      // If this is a reconnection from the same user
-      if (existingConnection) {
-        console.log(`[Reconnection] User ${username} reconnecting. Old SocketID: ${existingConnection.socket.id}, New SocketID: ${socket.id}`);
-        
-        // Clean up the old socket
-        try {
-          existingConnection.socket.disconnect(true);
-        } catch (err) {
-          console.log(`[DisconnectError] Error disconnecting old socket: ${err}`);
-        }
-      }
-    }
-    
-    // Store the new connection
-    activeConnections.set(username, { 
-      socket, 
-      username, 
-      connectionTime: Date.now() 
-    });
-    
-    console.log(`[AuthSuccess] User: ${username} added with SocketID: ${socket.id}. Active connections: ${Array.from(activeConnections.keys())}`);
-    socket.emit('authenticated', { username });
-  }
-  
-  socket.on('hello', (arg) => {
-      console.log(`[Hello] SocketID: ${socket.id}, Arg: ${arg}`); // 'world'
-  });
-
-  // Register user with token from POST response
-  socket.on('authenticate', ({ username, token }: { username: string, token: string }) => { // Changed any to string
-    console.log(`[AuthAttempt] User: ${username}, Token: ${token}, SocketID: ${socket.id}`);
-    // Verify token matches username (in production, verify properly)
-    if (token !== username) {
-      console.log(`[AuthReject] Invalid token for User: ${username}, SocketID: ${socket.id}`);
-      socket.emit('auth_error', 'Invalid token');
-      return;
-    }
-
-    if (activeConnections.has(username)) {
-      const existingConnection = activeConnections.get(username);
-      
-      // If this is a reconnection from the same user (like a page refresh)
-      if (existingConnection) {
-        console.log(`[Reconnection] User ${username} reconnecting. Old SocketID: ${existingConnection.socket.id}, New SocketID: ${socket.id}`);
-        
-        // Clean up the old socket
-        try {
-          existingConnection.socket.disconnect(true);
-        } catch (err) {
-          console.log(`[DisconnectError] Error disconnecting old socket: ${err}`);
-        }
-        
-        // Update with new socket
-        activeConnections.set(username, { 
-          socket, 
-          username, 
-          connectionTime: Date.now() 
-        });
-        
-        console.log(`[ReconnectSuccess] User: ${username} reconnected with SocketID: ${socket.id}`);
-        socket.emit('authenticated', { username });
-        return;
-      }
-    }
-
-    activeConnections.set(username, { 
-      socket, 
-      username, 
-      connectionTime: Date.now() 
-    });
-    console.log(`[AuthSuccess] User: ${username} added with SocketID: ${socket.id}. Active connections: ${Array.from(activeConnections.keys())}`);
-    socket.emit('authenticated', { username });
-  });
-
-  // Private message handler with validation
-  socket.on('privateMessage', (msg: ChatMessage) => {
-    console.log(`[PrivateMessage] From: ${msg.from} To: ${msg.to} SocketID: ${socket.id}`);
-    const sender = activeConnections.get(msg.from);
-    if (!sender || sender.socket.id !== socket.id) {
-      console.log(`[PrivateMessageError] Unauthorized attempt from SocketID: ${socket.id} as User: ${msg.from}`);
-      socket.emit('error', 'Unauthorized message attempt');
-      return;
-    }
-
-    const recipient = activeConnections.get(msg.to);
-    if (!recipient) {
-      console.log(`[PrivateMessageError] Recipient ${msg.to} not available for message from ${msg.from}`);
-      socket.emit('error', 'Recipient not available');
-      return;
-    }
-
-    // Verify both users are allowed to communicate
-    if (shouldUsersCommunicate(msg.from, msg.to)) {
-      recipient.socket.emit('privateMessage', msg);
-      socket.emit('messageDelivered', { 
-        to: msg.to,
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      socket.emit('error', 'Communication not allowed');
-    }
-  });
-
-  socket.on('connect', () => {
-    console.log(`[SocketConnectEvent] SocketID: ${socket.id} fired 'connect' event (this is unusual for server-side).`);
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.log(`[Disconnect] SocketID: ${socket.id}, Reason: ${reason}`);
-    let disconnectedUser: string | null = null;
-    // Find user by socket.id to remove from activeConnections
-    activeConnections.forEach((value, key) => {
-      if (value.socket.id === socket.id) {
-        disconnectedUser = key;
-      }
-    });
-
-    if (disconnectedUser) {
-      // For intentional disconnects or long disconnections, remove the user
-      if (reason === 'client namespace disconnect' || reason === 'transport close') {
-        // Keep the connection for a short time to allow for page refreshes
-        setTimeout(() => {
-          // Check if the user hasn't reconnected in the meantime
-          const currentConnection = activeConnections.get(disconnectedUser as string);
-          if (currentConnection && currentConnection.socket.id === socket.id) {
-            activeConnections.delete(disconnectedUser as string);
-            console.log(`[UserRemoved] User: ${disconnectedUser} (SocketID: ${socket.id}) removed after timeout. Active connections: ${Array.from(activeConnections.keys())}`);
-          }
-        }, 5000); // 5 seconds grace period for reconnection
-        
-        console.log(`[UserDisconnectTimeout] User: ${disconnectedUser} (SocketID: ${socket.id}) will be removed in 5 seconds if no reconnection occurs.`);
-      }
-    } else {
-      console.log(`[DisconnectNoUser] SocketID: ${socket.id} disconnected, but was not found in activeConnections (might not have authenticated).`);
-    }
-  });
-});
-
-// Helper function to validate communication permissions
-function shouldUsersCommunicate(user1: string, user2: string): boolean {
-  // Implement your business logic here
-  // Example: Check if users are friends, in same group, etc.
-  return true; // For now allowing all communications
+interface UserConnection {
+  socket: Socket;
+  username: string;
+  lastSeen: number;
 }
 
+const app = express();
+const port = parseInt(process.env.PORT || "4000", 10);
+const httpServer = createServer(app);
+
+// CORS middleware
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "http://localhost:3000");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
+
+// Socket.IO server with optimized settings
+const io = new Server(httpServer, {
+  pingInterval: 25000,
+  pingTimeout: 60000,
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+// Store active connections
+const activeConnections = new Map<string, UserConnection>();
+
+// Utility functions
+function getActiveUsers(): string[] {
+  return Array.from(activeConnections.keys());
+}
+
+function broadcastUsersList(): void {
+  const users = getActiveUsers();
+  console.log(
+    `[UsersList] Broadcasting to ${activeConnections.size} clients:`,
+    users,
+  );
+  io.emit("usersList", { users });
+}
+
+function isUserOnline(username: string): boolean {
+  return activeConnections.has(username);
+}
+
+function getUserSocket(username: string): Socket | null {
+  return activeConnections.get(username)?.socket || null;
+}
+
+// Authentication middleware
+io.use((socket, next) => {
+  const username = socket.handshake.auth?.username;
+
+  if (
+    !username ||
+    typeof username !== "string" ||
+    username.trim().length === 0
+  ) {
+    return next(new Error("Invalid username"));
+  }
+
+  socket.data.username = username.trim();
+  console.log(`[Auth] User ${username} attempting connection`);
+  next();
+});
+
+// Connection handler
+io.on("connection", (socket: Socket) => {
+  const username = socket.data.username;
+  console.log(`[Connect] ${username} connected (${socket.id})`);
+
+  // Handle existing connection
+  const existingConnection = activeConnections.get(username);
+  if (existingConnection) {
+    console.log(`[Reconnect] ${username} reconnecting, closing old connection`);
+    existingConnection.socket.disconnect(true);
+  }
+
+  // Store new connection
+  activeConnections.set(username, {
+    socket,
+    username,
+    lastSeen: Date.now(),
+  });
+
+  // Send auth confirmation and user list
+  socket.emit("authenticated", { username });
+  socket.emit("usersList", { users: getActiveUsers() });
+
+  // Broadcast updated user list
+  broadcastUsersList();
+
+  // Handle private messages
+  socket.on("privateMessage", (data, callback) => {
+    console.log(`[PrivateMessage] From: ${username} to: ${data.to}`);
+
+    try {
+      // Validate message data
+      if (!data.to || !data.text || typeof data.text !== "string") {
+        const error = "Invalid message format";
+        console.log(`[MessageError] ${error}`);
+        return callback?.({ error });
+      }
+
+      // Check if recipient exists and is online
+      const recipientSocket = getUserSocket(data.to);
+      if (!recipientSocket) {
+        const error = "Recipient not online";
+        console.log(`[MessageError] ${error}: ${data.to}`);
+        return callback?.({ error });
+      }
+
+      // Create message object
+      const message: ChatMessage = {
+        text: data.text.trim(),
+        timestamp: data.timestamp || new Date().toISOString(),
+        to: data.to,
+        from: username,
+      };
+
+      // Send message to recipient
+      recipientSocket.emit("privateMessage", message);
+
+      // Send confirmation to sender
+      callback?.({ success: true, timestamp: message.timestamp });
+
+      console.log(`[MessageSent] ${username} -> ${data.to}`);
+    } catch (error) {
+      console.error(`[MessageError] ${error}`);
+      callback?.({ error: "Failed to send message" });
+    }
+  });
+
+  // Handle user list requests
+  socket.on("getUsers", (callback) => {
+    const users = getActiveUsers();
+    console.log(`[GetUsers] Sending ${users.length} users to ${username}`);
+    callback?.({ users });
+  });
+
+  // Handle disconnect
+  socket.on("disconnect", (reason) => {
+    console.log(`[Disconnect] ${username} disconnected: ${reason}`);
+
+    // Remove user after a short delay to handle page refreshes
+    setTimeout(() => {
+      const currentConnection = activeConnections.get(username);
+
+      // Only remove if this is still the active connection
+      if (currentConnection?.socket.id === socket.id) {
+        activeConnections.delete(username);
+        console.log(`[UserRemoved] ${username} removed from active users`);
+        broadcastUsersList();
+      }
+    }, 5000); // 5 second grace period
+  });
+
+  // Update last seen periodically
+  const heartbeat = setInterval(() => {
+    const connection = activeConnections.get(username);
+    if (connection && connection.socket.id === socket.id) {
+      connection.lastSeen = Date.now();
+    } else {
+      clearInterval(heartbeat);
+    }
+  }, 30000); // Update every 30 seconds
+
+  socket.on("disconnect", () => {
+    clearInterval(heartbeat);
+  });
+});
+
+// Cleanup inactive connections every 2 minutes
+setInterval(() => {
+  const now = Date.now();
+  const timeout = 2 * 60 * 1000; // 2 minutes
+  let removedUsers = 0;
+
+  for (const [username, connection] of activeConnections.entries()) {
+    if (now - connection.lastSeen > timeout) {
+      console.log(`[Cleanup] Removing inactive user: ${username}`);
+      activeConnections.delete(username);
+      removedUsers++;
+    }
+  }
+
+  if (removedUsers > 0) {
+    console.log(`[Cleanup] Removed ${removedUsers} inactive users`);
+    broadcastUsersList();
+  }
+}, 120000);
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    activeConnections: activeConnections.size,
+    users: getActiveUsers(),
+  });
+});
+
 httpServer.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`🚀 Socket.IO server running on port ${port}`);
+  console.log(`📊 Health check available at http://localhost:${port}/health`);
 });
 
 export default app;
