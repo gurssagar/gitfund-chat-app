@@ -27,6 +27,7 @@ app.use((req, res, next) => {
   const allowedOrigins = [
     "http://localhost:3000",
     "https://gitfund-osnf.vercel.app",
+    "https://neoweave.tech"
   ];
   const origin = req.header("Origin");
   if (origin && allowedOrigins.includes(origin)) {
@@ -41,8 +42,9 @@ app.use((req, res, next) => {
 const io = new Server(httpServer, {
   pingInterval: 25000,
   pingTimeout: 60000,
+  transports: ['websocket', 'polling'],
   cors: {
-    origin: "https://gitfund-osnf.vercel.app",
+    origin: "https://neoweave.tech",
     methods: ["GET", "POST"],
     credentials: true,
   },
